@@ -1,0 +1,128 @@
+## template: jinja
+#cloud-config
+
+# v0.1.0
+
+# Provide the Publisher enrolment key/token. Ensure to paste it within the double quotes!
+{% set token = "TOKEN" %}
+
+# Add Netskope Root Cert in case Publisher goes through NS itself.
+# WARNING: Ensure NPA domains are bypassed as they are cert pinned and will break if inspected!
+ca_certs:
+  trusted: 
+  - |
+    -----BEGIN CERTIFICATE-----
+    MIID/DCCAuSgAwIBAgICATgwDQYJKoZIhvcNAQELBQAwgZcxCzAJBgNVBAYTAlVT
+    MQswCQYDVQQIEwJDQTEUMBIGA1UEBxMLU2FudGEgQ2xhcmExFjAUBgNVBAoTDU5l
+    dHNrb3BlIEluYy4xEjAQBgNVBAsTCWNlcnRhZG1pbjESMBAGA1UEAxMJY2VydGFk
+    bWluMSUwIwYJKoZIhvcNAQkBFhZjZXJ0YWRtaW5AbmV0c2tvcGUuY29tMB4XDTE5
+    MTAyNTE4MTg1MFoXDTI5MTAyMjE4MTg1MFowgZcxCzAJBgNVBAYTAlVTMQswCQYD
+    VQQIEwJDQTEUMBIGA1UEBxMLU2FudGEgQ2xhcmExFjAUBgNVBAoTDU5ldHNrb3Bl
+    IEluYy4xEjAQBgNVBAsTCWNlcnRhZG1pbjESMBAGA1UEAxMJY2VydGFkbWluMSUw
+    IwYJKoZIhvcNAQkBFhZjZXJ0YWRtaW5AbmV0c2tvcGUuY29tMIIBIjANBgkqhkiG
+    9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuYamgJifcWI3j9zv6OHI0hCQnZHj8uuzZ6sw
+    nfbediwij9X7MTbQZmswXZt4EgJ58uPN8Opt3+eh+XGP1wbQemUIm9ZkL5WzMVxP
+    3xW/twL5hBBQOXvn6JX5HS8N53fiDDU8LCuc0xj0Kpdl3TiDDpebtJe6UPiwebyz
+    jtOwD3ddpiIlArvRzUU1Hi9RIey2clf//3NChyvteQ3TIhciwxbViOxPHxXTRI7w
+    znFlwuDxvx7X5wwDkI2vzV2jpn23uIROjpCYC7kLvGInEKrgVAzoKauaC+tJmiJY
+    91m2KGN6xGc94JMRawH6Q+wv/7cBsOGVOUVIpxcM1XS5UqngTwIDAQABo1AwTjAM
+    BgNVHRMEBTADAQH/MB0GA1UdDgQWBBSvIpNrMIV6Lcujo5SCGWw3AGl7VDAfBgNV
+    HSMEGDAWgBSvIpNrMIV6Lcujo5SCGWw3AGl7VDANBgkqhkiG9w0BAQsFAAOCAQEA
+    pKVWEFpG7/d0kAhre2eYLwYEf6tVVP2to9Cp8RgBFSG/ScmEqt2/TXXcpMjRI5eG
+    nOUbPJIQJi2TQEiI/BG/g6CJZWJiE3fR3NTCksbLbcbdl7exkKT/tItebf4qXlca
+    ASSd0hBTygE7QqOPSENnSrj7r9P0gv0Z2Bf5jKdirhr/clz/ev88O3KYuxqwwl31
+    vyLDT0hd/Dzka2/ZKMXL5uFAtsYqpU4hz5NeGgNntKAkwcfFgsTh/NZaYjyRhvUp
+    jRBt2Mt8OwtxJ+vPM4mvpwFMzvfzhdJfKX/p6IWOJjDFHHFRqdFaHvW3zzarzFt6
+    tLom62fi7946+fyBmEPu5w==
+    -----END CERTIFICATE-----
+
+# Update software packages
+package_update: true
+package_upgrade: true
+
+# Install the following packages
+packages:
+  - wget
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - net-tools
+  - bind9-utils
+  - ufw
+  - cracklib-runtime
+
+# create the docker group
+groups:
+  - docker
+
+# Add default auto created user to docker group
+system_info:
+  default_user:
+    name: npa
+    groups: [docker]
+
+# Harden SSH
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-cloud-init
+    content: |
+      X11Forwarding no
+      HostbasedAuthentication no
+      PermitRootLogin no
+      PermitEmptyPasswords no
+      Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+      MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+      KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
+      AllowTcpForwarding no
+      MaxSessions 10
+
+# If no token specified, bootstrap only: Do not enrol publisher.
+{% if (token == "TOKEN") or (not token) %}{% set registerpub = False %}{% else %}{% set registerpub = True %}{% endif %}
+
+# Configure and deploy publisher
+runcmd:
+ - 'echo y | ufw enable'
+ - 'ufw allow to 191.1.1.1/32 proto tcp port 784'
+ - 'ufw allow to 191.1.1.1/32 proto udp port 785'
+ - 'ufw allow in on tun0 to any port 53 proto tcp'
+ - 'ufw allow in on tun0 to any port 53 proto udp'
+ - 'ufw allow 22/tcp'
+ - 'ufw allow in on lo'
+ - 'ufw deny in from 127.0.0.0/8'
+ - 'ufw deny in from ::1'
+ - 'ufw reload'
+ - 'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -'
+ - 'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"'
+ - 'apt-get update -y && apt-get install docker-ce docker-ce-cli containerd.io -y'
+ - 'echo -e "{\n\"bridge\": \"none\",\n\"iptables\": false\n}" > /etc/docker/daemon.json'
+ - systemctl start docker
+ - systemctl enable docker
+ - 'sleep 10'
+ - 'sg docker -c "docker pull netskopeprivateaccess/publisher:latest"'
+ - 'sg docker -c "docker tag netskopeprivateaccess/publisher:latest new_edge_access:latest"'
+ - 'mkdir /home/npa/resources'
+ - 'mkdir /home/npa/logs'
+ - 'sleep 3'
+ - 'docker run --rm --entrypoint cat new_edge_access:latest /home/npa_publisher_wizard > /home/npa/npa_publisher_wizard'
+ - 'sleep 3'
+ - 'chmod +x /home/npa/npa_publisher_wizard'
+ - 'chown ubuntu:ubuntu /home/npa/npa_publisher_wizard'
+ - 'wget https://s3-us-west-2.amazonaws.com/publisher.netskope.com/latest/generic/npa-publisher.ubuntu.service -O npa-publisher.service'
+ - 'mv npa-publisher.service /usr/lib/systemd/system'
+ - 'systemctl enable npa-publisher'
+ - 'sg docker -c "docker run --restart always --network=host --privileged --memory-swappiness=0 -e HOST_OS_TYPE=ubuntu -v /home/npa/resources:/home/resources -v /home/npa/logs:/home/logs -d new_edge_access:latest"'
+ - 'echo > /etc/securetty'
+ - 'passwd -d root'
+ - 'passwd --lock root'
+ - 'systemctl mask ctrl-alt-del.target'
+ - 'apt-get remove linux-firmware -y'
+ - sh -c "echo 'kernel.core_pattern=|/bin/false' > /etc/sysctl.d/50-coredump.conf"
+ - 'sysctl -p /etc/sysctl.d/50-coredump.conf'
+ - systemctl restart ssh
+ - 'apt autoremove -y'
+ - 'apt-get clean -y'
+{% if registerpub %}
+ - "/home/npa/npa_publisher_wizard -token {{ token }}"
+{% endif %}
