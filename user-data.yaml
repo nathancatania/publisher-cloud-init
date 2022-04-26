@@ -1,10 +1,23 @@
 ## template: jinja
 #cloud-config
 
-# v0.1.0
+# {# v0.2.0 #}
 
-# Provide the Publisher enrolment key/token. Ensure to paste it within the double quotes!
+# {# ####### START REQUIRED SETTINGS ####### #}
+
+# {# REQUIRED - Provide the Publisher enrolment key/token. Ensure to paste it within the double quotes! #}
+# {# Leaving this as the default value will install the publisher software, but not enrol it. #}
 {% set token = "TOKEN" %}
+
+# {# OPTIONAL - Import an SSH key from a public keyserver (GitHub). Enter your GitHub username, eg: "nathancatania" #}
+# {# Leave default if not needed #}
+{% set gh_identity = "username" %}
+
+# {# OPTIONAL - Add an authorized public SSH key to permit access to the Publisher host via npa username #}
+# {# Leave default if not needed #}
+{% set ssh_key = "ssh-rsa AAAABBBBCCCC..." %}
+
+# {# ####### END REQUIRED SETTINGS ####### #}
 
 # Add Netskope Root Cert in case Publisher goes through NS itself.
 # WARNING: Ensure NPA domains are bypassed as they are cert pinned and will break if inspected!
@@ -58,11 +71,21 @@ packages:
 groups:
   - docker
 
+
 # Add default auto created user to docker group
 system_info:
   default_user:
     name: npa
     groups: [docker]
+{% if (gh_identity != "username") or (not gh_identity) %}
+    ssh_import_id:
+      - gh:{{ gh_identity }}
+{% endif %}
+{% if (ssh_key != "ssh-rsa AAAABBBBCCCC...") or (not ssh_key) %}
+    ssh_authorized_keys:
+      - {{ ssh_key }}
+{% endif %}
+
 
 # Harden SSH
 write_files:
@@ -77,9 +100,13 @@ write_files:
       KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
       AllowTcpForwarding no
       MaxSessions 10
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "bridge": "none",
+        "iptables": false
+      }
 
-# If no token specified, bootstrap only: Do not enrol publisher.
-{% if (token == "TOKEN") or (not token) %}{% set registerpub = False %}{% else %}{% set registerpub = True %}{% endif %}
 
 # Configure and deploy publisher
 runcmd:
@@ -96,7 +123,6 @@ runcmd:
  - 'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -'
  - 'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"'
  - 'apt-get update -y && apt-get install docker-ce docker-ce-cli containerd.io -y'
- - 'echo -e "{\n\"bridge\": \"none\",\n\"iptables\": false\n}" > /etc/docker/daemon.json'
  - systemctl start docker
  - systemctl enable docker
  - 'sleep 10'
@@ -108,7 +134,7 @@ runcmd:
  - 'docker run --rm --entrypoint cat new_edge_access:latest /home/npa_publisher_wizard > /home/npa/npa_publisher_wizard'
  - 'sleep 3'
  - 'chmod +x /home/npa/npa_publisher_wizard'
- - 'chown ubuntu:ubuntu /home/npa/npa_publisher_wizard'
+ - 'chown npa:npa /home/npa/npa_publisher_wizard'
  - 'wget https://s3-us-west-2.amazonaws.com/publisher.netskope.com/latest/generic/npa-publisher.ubuntu.service -O npa-publisher.service'
  - 'mv npa-publisher.service /usr/lib/systemd/system'
  - 'systemctl enable npa-publisher'
@@ -123,6 +149,6 @@ runcmd:
  - systemctl restart ssh
  - 'apt autoremove -y'
  - 'apt-get clean -y'
-{% if registerpub %}
+{% if (token != "TOKEN") or (not token) %}
  - "/home/npa/npa_publisher_wizard -token {{ token }}"
 {% endif %}
