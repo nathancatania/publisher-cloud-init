@@ -1,5 +1,5 @@
 # Automated Netskope Publisher Deployment using Cloud-Init
-**Version: 0.1.0**
+**Version: 0.2.0**
 
 ## What is this?
 This is a User-Data configuration file for Cloud-Init that will automatically deploy, configure and enrol a Netskope Publisher in AWS, Azure or GCP; eliminating the need for any manual configuration from the command-line.
@@ -36,7 +36,7 @@ The admin then needs to manually apply the enrollment token/key to register the 
 
 This Cloud-Init configuration actions the above steps from the bootstrapping script, in addition to the following:
 * Installs the Netskope Root CA in case you wish to SSL inspect traffic coming from the VM using the Netskope service.
- * Note: Be sure to bypass the NPA domains if you do this as the publisher tunnel back to Netskope is certificate pinned and designed to break if SSL inspected.
+   * Note: Be sure to bypass the NPA domains if you do this as the publisher tunnel back to Netskope is certificate pinned and designed to break if SSL inspected.
 * Applies the specified enrollment token/key to the publisher so that the Publisher can be used straight away with no further configuration required.
 * [OPTIONAL/RECOMMENDED] If specified, applies a list of authorized public SSH keys so that you can actually connect to the host VM to manage the publisher.
 
@@ -44,19 +44,41 @@ This Cloud-Init configuration actions the above steps from the bootstrapping scr
 1. [Access the configuration file here](https://github.com/nathancatania/publisher-cloud-init/blob/main/user-data.yaml) and copy the text. Note where it says to paste in the Publisher enrollment token.
 2. Access your Netskope Admin Console and create a new Publisher. Generate an enrollment token and paste it into the appropriate field in the configuration file.
 3. Create an Ubuntu VM within your IaaS environment. This was validated on Ubuntu Server 20.04 LTS.
-4. During the VM creation workflow, paste in the configuration text (including your Publisher enrollment token) into a field marked as cloud-init/custom-data/user-data. This is different for every platform (see specific instructions below (TODO)).
+4. During the VM creation workflow, paste in the configuration text (including your Publisher enrollment token) into a field marked as cloud-init/custom-data/user-data. This is different for every platform (see specific instructions below).
 5. Wait a few minutes. After some time, you should see the Publisher be marked as `Connected` in the Netskope Admin Console.
+6. If you specified an SSH key in the config, you should now be able to SSH to the Publisher VM using the `npa` user. Eg: `ssh -i <key> npa@<publisher-ip>`
+
+### AWS / EC2
+* For AWS EC2, when creating a VM instance, scroll down and under **Advanced Details**, simply paste the configuration into the **User-Data**.
+* Don't worry about explicitly setting an SSH identity/key when configuring the VM details - the configuration data can do this for you under the `npa` user.
+* Don't forget to add the Publisher enrollment key.
+
+![aws](https://i.imgur.com/vc7POtl.png)
+
+### Azure
+* For Azure, when creating a VM instance, select the **Advanced** tab, and paste the configuration into the **Custom data** field under the **Custom data and cloud init** sub-heading.
+* Don't worry about explicitly setting an SSH identity/key when configuring the VM details - the configuration data can do this for you under the `npa` user.
+* Don't forget to add the Publisher enrollment key.
+![azure](https://i.imgur.com/2GetPUq.png)
+
+### GCP
+* For Google Cloud, when creating a VM instance, open the **Management** tab, and add a new item under **Metadata**.
+* Set the **key** to be `user-data` exactly! For the value, paste in the configuration.
+* Don't forget to add the Publisher enrollment key.
+![gcp](https://i.imgur.com/6YLrF9f.png)
+
 
 ## Who are you?
 I'm a Netskope Solutions Engineer that created this to make everyone's lives easier! This script is NOT officially supported by Netskope however (by using it, you agree to use it at your own risk). Additionally, any of my own thoughts are my own and do not reflect those of Netskope.
 
 # TODO
-* Add logic to apply authorized SSH keys if present.
+* ~~Add logic to apply authorized SSH keys if present.~~
 * Simplify the existing `runcmd` commands to use native cloud-init modules where possible.
 * Possibly simplify even further to pull most of the logic/commands from a remote script (hosted by Netskope) to execute - similar to how the existing bootstrap script works today.
-* Test on AWS (Azure and GCP are done and working)
-* Update documentation to add more detailed instructions (and screenshots) for AWS, Azure, GCP, and DO.
+* ~~Test on AWS (Azure and GCP are done and working)~~
+* Update documentation to add more detailed instructions (and screenshots) for ~~AWS, Azure, GCP~~, and DO.
 
 # Known Issues
 * The NPA Publisher Wizard does not auto-start when you SSH to the VM. Currently it can be manaully run by running the command: `sudo /home/npa/npa_publisher_wizard`
+* Logic to grab SSH Public Key from GitHub might not be working. Need to test further, but recommend you manually define an SSH key using the 2nd method/option for now.
 * Note an issue per-se, but when SSH'ing to the VM, you will need to SSH as the `npa` default user. Eg: `ssh npa@publisher-ip`
