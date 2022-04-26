@@ -40,7 +40,7 @@ This Cloud-Init configuration actions the above steps from the bootstrapping scr
 * Applies the specified enrollment token/key to the publisher so that the Publisher can be used straight away with no further configuration required.
 * [OPTIONAL/RECOMMENDED] If specified, applies a list of authorized public SSH keys so that you can actually connect to the host VM to manage the publisher.
 
-## How do I use this?
+# How do I use this?
 1. [Access the configuration file here](https://github.com/nathancatania/publisher-cloud-init/blob/main/user-data.yaml) and copy the text. Note where it says to paste in the Publisher enrollment token.
 2. Access your Netskope Admin Console and create a new Publisher. Generate an enrollment token and paste it into the appropriate field in the configuration file.
 3. Create an Ubuntu VM within your IaaS environment. This was validated on Ubuntu Server 20.04 LTS.
@@ -48,28 +48,100 @@ This Cloud-Init configuration actions the above steps from the bootstrapping scr
 5. Wait a few minutes. After some time, you should see the Publisher be marked as `Connected` in the Netskope Admin Console.
 6. If you specified an SSH key in the config, you should now be able to SSH to the Publisher VM using the `npa` user. Eg: `ssh -i <key> npa@<publisher-ip>`
 
-### AWS / EC2
+## AWS / EC2
 * For AWS EC2, when creating a VM instance, scroll down and under **Advanced Details**, simply paste the configuration into the **User-Data**.
 * Don't worry about explicitly setting an SSH identity/key when configuring the VM details - the configuration data can do this for you under the `npa` user.
 * Don't forget to add the Publisher enrollment key.
 
 ![aws](https://i.imgur.com/vc7POtl.png)
 
-### Azure
+## Azure
 * For Azure, when creating a VM instance, select the **Advanced** tab, and paste the configuration into the **Custom data** field under the **Custom data and cloud init** sub-heading.
 * Don't worry about explicitly setting an SSH identity/key when configuring the VM details - the configuration data can do this for you under the `npa` user.
 * Don't forget to add the Publisher enrollment key.
 ![azure](https://i.imgur.com/2GetPUq.png)
 
-### GCP
+## GCP
 * For Google Cloud, when creating a VM instance, open the **Management** tab, and add a new item under **Metadata**.
 * Set the **key** to be `user-data` exactly! For the value, paste in the configuration.
 * Don't forget to add the Publisher enrollment key.
 ![gcp](https://i.imgur.com/6YLrF9f.png)
 
+# Who are you?
+I'm a Netskope Solutions Engineer that created this to make everyone's lives easier! This script is NOT officially supported by Netskope, and by using it, **you agree to use it at your own risk**. Additionally, any of my own thoughts posted here are my own and do not reflect those of Netskope.
 
-## Who are you?
-I'm a Netskope Solutions Engineer that created this to make everyone's lives easier! This script is NOT officially supported by Netskope however (by using it, you agree to use it at your own risk). Additionally, any of my own thoughts are my own and do not reflect those of Netskope.
+# Validation / Troubleshooting Steps
+If you're not sure whether this has worked properly, do the following:
+
+## Connect to the VM
+SSH to the VM using the `npa` user, eg: `ssh -i <ssh-key> npa@<vm-ipaddress>`
+
+* Note: You'll only be able to SSH to the VM if you also specified an SSH key or identity in the configuration.
+  
+## Check the status of cloud-init
+Check the status of the cloud-init service: `cloud-init status`
+
+```
+npa@i-097b1b0c65d4ef774:~$ cloud-init status
+status: done
+```
+
+If the status shows `status: running`, cloud-init is still configuring the VM. Either wait a few more minutes or proceed below.
+
+## Check the cloud-init logs
+
+  * `/var/log/cloud-init-output.log` is the live output as the configuration is being applied. Very useful to observe this file if your cloud-init status is still `status: running`. You can also run `sudo tail -f /var/log/cloud-init-output.log` if cloud-init is still running to see the live output as this log is written to.
+  * `/var/log/cloud-init.log` is the log of the overarching cloud-init process itself.
+ 
+```
+npa@i-097b1b0c65d4ef774:~$ sudo cat /var/log/cloud-init-output.log
+[...snip...]
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following packages will be REMOVED:
+  libfwupdplugin1
+0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
+After this operation, 459 kB disk space will be freed.
+(Reading database ... 92928 files and directories currently installed.)
+Removing libfwupdplugin1:amd64 (1.5.11-0ubuntu1~20.04.2) ...
+Processing triggers for libc-bin (2.31-0ubuntu9.7) ...
+Registering with your Netskope address: ns-[REDACTED].us-sjc1.npa.goskope.com
+Publisher certificate CN: [REDACTED]
+Attempt 1 to register publisher.
+Publisher registered successfully.
+
+Verifying connectivity to the Netskope Dataplane...
+Connectivity to the Netskope Dataplane was successfully verified.
+Cloud-init v. 21.4-0ubuntu1~20.04.1 running 'modules:final' at Tue, 26 Apr 2022 01:57:49 +0000. Up 18.20 seconds.
+Cloud-init v. 21.4-0ubuntu1~20.04.1 finished at Tue, 26 Apr 2022 02:01:43 +0000. Datasource DataSourceEc2Local.  Up 252.19 seconds
+```
+
+## Check the applied configuration
+`/var/lib/cloud/instance/user-data.txt` is a copy of the configuration template you pasted in during VM creation. You can see what this looks like in a rendered/finished state (ie: the *exact* configuration that cloud-init applies) through the following command: `sudo cloud-init devel render /var/lib/cloud/instance/user-data.txt`
+
+Unrendered template example:
+```
+npa@i-097b1b0c65d4ef774:~$ sudo cat /var/lib/cloud/instance/user-data.txt
+ - systemctl restart ssh
+ - 'apt autoremove -y'
+ - 'apt-get clean -y'
+{% if (token != "TOKEN") or (not token) %}
+ - "/home/npa/npa_publisher_wizard -token {{ token }}"
+{% endif %}
+```
+
+Rendered template example:
+```
+npa@i-097b1b0c65d4ef774:~$ sudo cloud-init devel render /var/lib/cloud/instance/user-data.txt
+[...snip...]
+ - systemctl restart ssh
+ - 'apt autoremove -y'
+ - 'apt-get clean -y'
+ - "/home/npa/npa_publisher_wizard -token eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJucy0xMzY1Ni51cy1zamMxLm5w[REDACTED]fGXxg"
+```
+
+---
 
 # TODO
 * ~~Add logic to apply authorized SSH keys if present.~~
