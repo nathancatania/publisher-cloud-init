@@ -1,5 +1,5 @@
 # Automated Netskope Publisher Deployment using Cloud-Init
-**Version: 0.2.0**
+**Version: 0.2.1**
 
 ## What is this?
 This is a User-Data configuration file for Cloud-Init that will automatically deploy, configure and enrol a Netskope Publisher in AWS, Azure or GCP; eliminating the need for any manual configuration from the command-line.
